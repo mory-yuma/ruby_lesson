@@ -30,12 +30,25 @@ get "/" do
   <body>
     <form action="/add" method="post">
       <input name="task" type="text">
+      <select name="category_id">
+        #{DB.query("SELECT * FROM categories").map do |c|
+          "<option value='#{c[:id]}'>#{c[:name]}</option>"
+        end.join}
+      </select>
       <input type="submit">
     </form>
     <ul>
-    #{DB.query('SELECT * FROM todos').map do |t|
-    checked = t[:done].to_i == 1 ? "checked" : ""
-    done_class = t[:done].to_i == 1 ? "done" : ""
+    #{DB.query("
+      SELECT todos.*, categories.name AS category_name
+      FROM todos
+      LEFT JOIN categories ON todos.category_id = categories.id
+    ").map do |t|
+    checked = ""
+    done_class = ""
+    if t[:done].to_i == 1
+      checked = "checked"
+      done_class = "done"
+    end
     task_id = t[:id].to_i
     # onchange =JSのイベント属性 チェックボックスの値が変わったときに動くイベント
     # this.form.submit() = ここではinput要素のあるform要素のフォームを送信 となる
@@ -44,7 +57,7 @@ get "/" do
         <form action="/toggle/#{task_id}" method="post" style="display:inline">
           <input type="checkbox" onchange="this.form.submit()" #{checked}>
         </form>
-        #{t[:name]}
+        #{t[:name]}（カテゴリ：#{t[:category_name]}）
         <a href="/delete/#{task_id}">削除</a>
       </li>
     ITEM
@@ -58,26 +71,29 @@ end
 # "/add"にpostリクエストが送られた時に実行
 post "/add" do
   task = params[:task]
-  DB.query("INSERT INTO todos (name) VALUES ('#{DB.escape(task)}')")
+  category_id = params[:category_id].to_i
+  DB.query("INSERT INTO todos (name, category_id) VALUES ('#{DB.escape(task)}', #{category_id})")
   redirect "/"
 end
 
 # .escapeは文字列をエスケープするメソッド to_sは文字列化するメソッド
 get "/delete/:id" do
   id = params[:id].to_i
-  DB.query("DELETE FROM todos WHERE id = #{DB.escape(id.to_s)}")
+  query = DB.prepare("DELETE FROM todos WHERE id = ?")
+  query.execute(id)
   redirect "/"
 end
-
 
 post "/toggle/:id" do 
   id = params[:id].to_i
   result = DB.query("SELECT done FROM todos WHERE id = #{id}").first
   done = result[:done].to_i
   if done == 0 then
-    DB.query("UPDATE todos SET done = 1 WHERE id = #{id}")
+    done = 1
   else
-    DB.query("UPDATE todos SET done = 0 WHERE id = #{id}")
+    done = 0
   end
+  DB.query("UPDATE todos SET done = #{done} WHERE id = #{id}")
+
   redirect "/"
 end
