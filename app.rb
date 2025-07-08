@@ -26,12 +26,15 @@ get "/" do
     .done {
       text-decoration: line-through;
     }
+    .flex {
+      display:flex;
+    }
   </style>
   <body>
-    <form action="/add" method="post">
+    <form action="/tasks/add" method="post">
       <input name="task" type="text">
       <select name="category_id">
-        #{DB.query("SELECT * FROM categories").map do |c|
+        #{DB.query("SELECT id, name FROM categories").map do |c|
           "<option value='#{c[:id]}'>#{c[:name]}</option>"
         end.join}
       </select>
@@ -41,7 +44,7 @@ get "/" do
     #{DB.query("
       SELECT todos.*, categories.name AS category_name
       FROM todos
-      LEFT JOIN categories ON todos.category_id = categories.id
+      INNER JOIN categories ON todos.category_id = categories.id
     ").map do |t|
     checked = ""
     done_class = ""
@@ -53,12 +56,12 @@ get "/" do
     # onchange =JSのイベント属性 チェックボックスの値が変わったときに動くイベント
     # this.form.submit() = ここではinput要素のあるform要素のフォームを送信 となる
     <<~ITEM
-      <li class = "#{done_class}">
-        <form action="/toggle/#{task_id}" method="post" style="display:inline">
+      <li class = "#{done_class} flex">
+        <form action="/tasks/#{task_id}/toggle" method="post">
           <input type="checkbox" onchange="this.form.submit()" #{checked}>
         </form>
         #{t[:name]}（カテゴリ：#{t[:category_name]}）
-        <a href="/delete/#{task_id}">削除</a>
+        <a href="/tasks/delete/#{task_id}">削除</a>
       </li>
     ITEM
     end.join}
@@ -69,7 +72,7 @@ get "/" do
 end
 
 # "/add"にpostリクエストが送られた時に実行
-post "/add" do
+post "/tasks/add" do
   task = params[:task]
   category_id = params[:category_id].to_i
   DB.query("INSERT INTO todos (name, category_id) VALUES ('#{DB.escape(task)}', #{category_id})")
@@ -77,14 +80,14 @@ post "/add" do
 end
 
 # .escapeは文字列をエスケープするメソッド to_sは文字列化するメソッド
-get "/delete/:id" do
+get "/tasks/delete/:id" do
   id = params[:id].to_i
   query = DB.prepare("DELETE FROM todos WHERE id = ?")
   query.execute(id)
   redirect "/"
 end
 
-post "/toggle/:id" do 
+post "/tasks/:id/toggle" do 
   id = params[:id].to_i
   result = DB.query("SELECT done FROM todos WHERE id = #{id}").first
   done = result[:done].to_i
