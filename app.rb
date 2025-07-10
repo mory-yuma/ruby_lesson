@@ -31,7 +31,7 @@ get "/" do
     }
   </style>
   <body>
-    <form action="/tasks/add" method="post">
+    <form action="/tasks" method="post">
       <input name="task" type="text">
       <select name="category_id">
         #{DB.query("SELECT id, name FROM categories").map do |c|
@@ -57,11 +57,15 @@ get "/" do
     # this.form.submit() = ここではinput要素のあるform要素のフォームを送信 となる
     <<~ITEM
       <li class = "#{done_class} flex">
-        <form action="/tasks/#{task_id}/toggle" method="post">
+        <form action="/tasks/#{task_id}" method="post">
+          <input type="hidden" name="_method" value="patch">
           <input type="checkbox" onchange="this.form.submit()" #{checked}>
         </form>
         #{t[:name]}（カテゴリ：#{t[:category_name]}）
-        <a href="/tasks/delete/#{task_id}">削除</a>
+        <form action="/tasks/#{task_id}" method="post">
+          <input type="hidden" name="_method" value="delete">
+          <button type="submit">削除</button>
+        </form>
       </li>
     ITEM
     end.join}
@@ -71,8 +75,8 @@ get "/" do
   HTML
 end
 
-# "/add"にpostリクエストが送られた時に実行
-post "/tasks/add" do
+
+post "/tasks" do
   task = params[:task]
   category_id = params[:category_id].to_i
   DB.query("INSERT INTO todos (name, category_id) VALUES ('#{DB.escape(task)}', #{category_id})")
@@ -80,14 +84,14 @@ post "/tasks/add" do
 end
 
 # .escapeは文字列をエスケープするメソッド to_sは文字列化するメソッド
-get "/tasks/delete/:id" do
+delete "/tasks/:id" do
   id = params[:id].to_i
   query = DB.prepare("DELETE FROM todos WHERE id = ?")
   query.execute(id)
   redirect "/"
 end
 
-post "/tasks/:id/toggle" do 
+patch "/tasks/:id" do 
   id = params[:id].to_i
   result = DB.query("SELECT done FROM todos WHERE id = #{id}").first
   done = result[:done].to_i
@@ -97,6 +101,5 @@ post "/tasks/:id/toggle" do
     done = 0
   end
   DB.query("UPDATE todos SET done = #{done} WHERE id = #{id}")
-
   redirect "/"
 end
