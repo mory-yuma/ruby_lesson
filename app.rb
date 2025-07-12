@@ -23,7 +23,7 @@ get "/" do
     <title>Document</title>
   </head>
   <style>
-    .done {
+    .completed {
       text-decoration: line-through;
     }
     .flex {
@@ -47,16 +47,16 @@ get "/" do
       INNER JOIN categories ON todos.category_id = categories.id
     ").map do |t|
     checked = ""
-    done_class = ""
-    if t[:done].to_i == 1
+    is_completed_class = ""
+    if t[:is_completed].to_i == 1
       checked = "checked"
-      done_class = "done"
+      is_completed_class = "completed"
     end
     task_id = t[:id].to_i
     # onchange =JSのイベント属性 チェックボックスの値が変わったときに動くイベント
     # this.form.submit() = ここではinput要素のあるform要素のフォームを送信 となる
     <<~ITEM
-      <li class = "#{done_class} flex">
+      <li class = "#{is_completed_class} flex">
         <form action="/tasks/#{task_id}" method="post">
           <input type="hidden" name="_method" value="patch">
           <input type="checkbox" onchange="this.form.submit()" #{checked}>
@@ -93,13 +93,13 @@ end
 
 patch "/tasks/:id" do 
   id = params[:id].to_i
-  result = DB.query("SELECT done FROM todos WHERE id = #{id}").first
-  done = result[:done].to_i
-  if done == 0 then
-    done = 1
+  result = DB.query("SELECT is_completed FROM todos WHERE id = #{id}").first
+  is_completed = result[:is_completed].to_i
+  if is_completed == 0 then
+    is_completed = 1
   else
-    done = 0
+    is_completed = 0
   end
-  DB.query("UPDATE todos SET done = #{done} WHERE id = #{id}")
+  DB.query("UPDATE todos SET is_completed = #{is_completed} WHERE id = #{id}")
   redirect "/"
 end
