@@ -1,7 +1,15 @@
 require "sinatra"
 require "sinatra/reloader"
+require "mysql2"
 
-$todos = []
+
+DB = Mysql2::Client.new(
+  host: "localhost",
+  username: "root",
+  password: "",
+  database: "todo_app", 
+  symbolize_keys: true      # 結果のキーを文字列でなくシンボルで返す（:name など）
+)
 
 # getリクエスト = ブラウザ(ChromeやSafari)がサーバーに「このページの内容をください」とお願いするリクエスト
 # "/"に対してgetリクエストを送ってきたらブロックの処理をしますよ
@@ -15,28 +23,49 @@ get "/" do
     <title>Document</title>
   </head>
   <style>
-    .done {
+    .completed {
       text-decoration: line-through;
+    }
+    .flex {
+      display:flex;
     }
   </style>
   <body>
-    <form action="/add" method="post">
+    <form action="/tasks" method="post">
       <input name="task" type="text">
+      <select name="category_id">
+        #{DB.query("SELECT id, name FROM categories").map do |c|
+          "<option value='#{c[:id]}'>#{c[:name]}</option>"
+        end.join}
+      </select>
       <input type="submit">
     </form>
     <ul>
-    #{$todos.each_with_index.map do |t, i|
-    checked = t[:done] ? "checked" : ""
-    done_class = t[:done] == true ? "done" : ""
+    #{DB.query("
+      SELECT todos.*, categories.name AS category_name
+      FROM todos
+      INNER JOIN categories ON todos.category_id = categories.id
+    ").map do |t|
+    checked = ""
+    is_completed_class = ""
+    if t[:is_completed].to_i == 1
+      checked = "checked"
+      is_completed_class = "completed"
+    end
+    task_id = t[:id].to_i
     # onchange =JSのイベント属性 チェックボックスの値が変わったときに動くイベント
     # this.form.submit() = ここではinput要素のあるform要素のフォームを送信 となる
     <<~ITEM
-      <li class = "#{done_class}">
-        <form action="/toggle/#{i}" method="post" style="display:inline">
+      <li class = "#{is_completed_class} flex">
+        <form action="/tasks/#{task_id}" method="post">
+          <input type="hidden" name="_method" value="patch">
           <input type="checkbox" onchange="this.form.submit()" #{checked}>
         </form>
-        #{t[:name]}
-        <a href="/delete/#{i}">削除</a>
+        #{t[:name]}（カテゴリ：#{t[:category_name]}）
+        <form action="/tasks/#{task_id}" method="post">
+          <input type="hidden" name="_method" value="delete">
+          <button type="submit">削除</button>
+        </form>
       </li>
     ITEM
     end.join}
@@ -46,21 +75,31 @@ get "/" do
   HTML
 end
 
-# "/add"にpostリクエストが送られた時に実行
-post "/add" do
-  $todos << { name: params[:task], done: false}
+
+post "/tasks" do
+  task = params[:task]
+  category_id = params[:category_id].to_i
+  DB.query("INSERT INTO todos (name, category_id) VALUES ('#{DB.escape(task)}', #{category_id})")
   redirect "/"
 end
 
-get "/delete/:id" do
-  # sinatraではシンボルで値を受け取ると文字列になってしまう仕様のため.to_iで整数化
+# .escapeは文字列をエスケープするメソッド to_sは文字列化するメソッド
+delete "/tasks/:id" do
   id = params[:id].to_i
-  $todos.delete_at(id) if id >= 0 && id < $todos.size
+  query = DB.prepare("DELETE FROM todos WHERE id = ?")
+  query.execute(id)
   redirect "/"
 end
 
-post "/toggle/:id" do 
+patch "/tasks/:id" do 
   id = params[:id].to_i
-  $todos[id][:done] = !$todos[id][:done]
+  result = DB.query("SELECT is_completed FROM todos WHERE id = #{id}").first
+  is_completed = result[:is_completed].to_i
+  if is_completed == 0 then
+    is_completed = 1
+  else
+    is_completed = 0
+  end
+  DB.query("UPDATE todos SET is_completed = #{is_completed} WHERE id = #{id}")
   redirect "/"
 end
