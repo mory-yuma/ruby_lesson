@@ -1,48 +1,24 @@
-<html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Document</title>
-</head>
-<style>
-  .completed {
-    text-decoration: line-through;
-  }
-  .flex {
-    display:flex;
-  }
-</style>
-<body>
-  <form action="/tasks" method="post">
-    <input name="task" type="text">
-    <select name="category_id">
-    <% @categories.each do |c| %>
-      <option value = "<%= c[:id] %>"><%= c[:name] %></option>
-    <% end %>
-    </select>
-    <input type="submit">
-  </form>
-  <ul>
-  <% @todos.each do |t| %>
-    <% checked = "" %>
-    <% is_completed_class = "" %>
-    <% if t[:is_completed].to_i == 1 %>
-      <% checked = "checked" %>
-      <% is_completed_class = "completed" %>
-    <% end %>
-    <% task_id = t[:id].to_i %>
-    <li class = "<%= is_completed_class %> flex">
-      <form action="/tasks/<%= task_id %>" method="post">
-        <input type="hidden" name="_method" value="patch">
-        <input type="checkbox" onchange="this.form.submit()" <%= checked %>>
-      </form>
-      <%= t[:name] %>（カテゴリ：<%= t[:category_name] %>）
-      <form action="/tasks/<%= task_id %>" method="post">
-        <input type="hidden" name="_method" value="delete">
-        <button type="submit">削除</button>
-      </form>
-    </li>
+<form action="/tasks" method="post">
+  <input name="task" type="text">
+  <select name="category_id">
+  <% @categories.each do |c| %>
+    <option value = "<%= c[:id] %>"><%= c[:name] %></option>
   <% end %>
-  </ul>
-</body>
-</html>
+  </select>
+  <input type="submit">
+</form>
+<ul>
+<% @todos.each do |t| %>
+  <li class = "<%= t[:is_completed_class] %> flex">
+    <form action="/tasks/<%= t[:id] %>" method="post">
+      <input type="hidden" name="_method" value="patch">
+      <input type="checkbox" onchange="this.form.submit()" <%= t[:checked] %>>
+    </form>
+    <%= t[:task_name] %>（カテゴリ：<%= t[:category_name] %>）
+    <form action="/tasks/<%= t[:id] %>" method="post">
+      <input type="hidden" name="_method" value="delete">
+      <button type="submit">削除</button>
+    </form>
+  </li>
+<% end %>
+</ul>

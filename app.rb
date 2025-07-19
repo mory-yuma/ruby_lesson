@@ -20,7 +20,14 @@ get "/" do
       SELECT todos.*, categories.name AS category_name
       FROM todos
       INNER JOIN categories ON todos.category_id = categories.id
-    ")
+    ").map do |t| {
+      id: t[:id],
+      task_name: t[:name],
+      category_name: t[:category_name],
+      checked: t[:is_completed].to_i == 1 ? "checked" : "",
+      is_completed_class: t[:is_completed].to_i == 1 ? "completed" : ""
+    }
+  end
   erb :index
 end
 
