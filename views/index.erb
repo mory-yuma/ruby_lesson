@@ -1,0 +1,24 @@
+<form action="/tasks" method="post">
+  <input name="task" type="text">
+  <select name="category_id">
+  <% @categories.each do |c| %>
+    <option value = "<%= c[:id] %>"><%= c[:name] %></option>
+  <% end %>
+  </select>
+  <input type="submit">
+</form>
+<ul>
+<% @todos.each do |t| %>
+  <li class = "<%= t[:is_completed_class] %> flex">
+    <form action="/tasks/<%= t[:id] %>" method="post">
+      <input type="hidden" name="_method" value="patch">
+      <input type="checkbox" onchange="this.form.submit()" <%= t[:checked] %>>
+    </form>
+    <%= t[:task_name] %>（カテゴリ：<%= t[:category_name] %>）
+    <form action="/tasks/<%= t[:id] %>" method="post">
+      <input type="hidden" name="_method" value="delete">
+      <button type="submit">削除</button>
+    </form>
+  </li>
+<% end %>
+</ul>

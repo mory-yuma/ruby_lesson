@@ -15,66 +15,21 @@ DB = Mysql2::Client.new(
 # "/"に対してgetリクエストを送ってきたらブロックの処理をしますよ
 # aタグはgetリクエストを送る
 get "/" do
-  <<~HTML
-  <html lang="ja">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-  </head>
-  <style>
-    .completed {
-      text-decoration: line-through;
-    }
-    .flex {
-      display:flex;
-    }
-  </style>
-  <body>
-    <form action="/tasks" method="post">
-      <input name="task" type="text">
-      <select name="category_id">
-        #{DB.query("SELECT id, name FROM categories").map do |c|
-          "<option value='#{c[:id]}'>#{c[:name]}</option>"
-        end.join}
-      </select>
-      <input type="submit">
-    </form>
-    <ul>
-    #{DB.query("
+  @categories = DB.query("SELECT id, name FROM categories")
+  @todos = DB.query("
       SELECT todos.*, categories.name AS category_name
       FROM todos
       INNER JOIN categories ON todos.category_id = categories.id
-    ").map do |t|
-    checked = ""
-    is_completed_class = ""
-    if t[:is_completed].to_i == 1
-      checked = "checked"
-      is_completed_class = "completed"
-    end
-    task_id = t[:id].to_i
-    # onchange =JSのイベント属性 チェックボックスの値が変わったときに動くイベント
-    # this.form.submit() = ここではinput要素のあるform要素のフォームを送信 となる
-    <<~ITEM
-      <li class = "#{is_completed_class} flex">
-        <form action="/tasks/#{task_id}" method="post">
-          <input type="hidden" name="_method" value="patch">
-          <input type="checkbox" onchange="this.form.submit()" #{checked}>
-        </form>
-        #{t[:name]}（カテゴリ：#{t[:category_name]}）
-        <form action="/tasks/#{task_id}" method="post">
-          <input type="hidden" name="_method" value="delete">
-          <button type="submit">削除</button>
-        </form>
-      </li>
-    ITEM
-    end.join}
-    </ul>
-  </body>
-  </html>
-  HTML
+    ").map do |t| {
+      id: t[:id],
+      task_name: t[:name],
+      category_name: t[:category_name],
+      checked: t[:is_completed].to_i == 1 ? "checked" : "",
+      is_completed_class: t[:is_completed].to_i == 1 ? "completed" : ""
+    }
+  end
+  erb :index
 end
-
 
 post "/tasks" do
   task = params[:task]
