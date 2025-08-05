@@ -1,11 +1,12 @@
 require "sinatra"
-# require "sinatra/reloader"
+require "sinatra/reloader"
 require "mysql2"
 require "bcrypt"
 # -理解していない部分-
 require "securerandom"
+require "dotenv/load"
 
-secret_key = SecureRandom.hex(64)  # これで起動時にだけ生成する
+secret_key = ENV["SECRET_KEY"]
 
 use Rack::Session::Cookie, key: 'rack.session',
                            path: '/',
@@ -25,14 +26,28 @@ get "/signup" do
   erb :signup
 end
 # signup処理
+EMAIL_REGEX = /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i
 post "/signup" do
   name = params[:name]
   email = params[:email]
   password = params[:password]
-  password_digest = BCrypt::Password.create(password)
-  stmt = DB.prepare("INSERT INTO users (name,email,password_digest) VALUES (?,?,?)")
-  stmt.execute(name,email,password_digest)
-  redirect "/login"
+  stmt = DB.prepare("SELECT * FROM users WHERE email = ?")
+  existing_user = stmt.execute(email).first
+  errors = []
+  errors << "メールアドレスは必須です。" if email.nil? || email.strip.empty?
+  errors << "メールアドレスの形式が正しくありません。" if email && !(email =~ EMAIL_REGEX)
+  errors << "そのメールアドレスはすでに登録されています。" if existing_user
+  errors << "パスワードは必須です。" if password.nil? || password.strip.empty?
+  errors << "パスワードは4桁以上にしてください。" if password && password.length < 4
+  if errors.any?
+    @errors = errors
+    erb :signup
+  else 
+    password_digest = BCrypt::Password.create(password)
+    stmt = DB.prepare("INSERT INTO users (name,email,password_digest) VALUES (?,?,?)")
+    stmt.execute(name,email,password_digest)
+    redirect "/login"
+  end
 end
 
 #login
@@ -91,7 +106,7 @@ post "/tasks" do
   category_id = params[:category_id].to_i
   user_id = session[:user_id]
   stmt = DB.prepare("INSERT INTO todos (name, category_id, user_id) VALUES (?,?,?)")
-  stmt.execute(task,category_id,user_id)
+  stmt.execute(task, category_id, user_id)
   redirect "/"
 end
 
@@ -99,22 +114,23 @@ end
 delete "/tasks/:id" do
   id = params[:id].to_i
   user_id = session[:user_id]
-  stmt = DB.prepare("DELETE FROM todos WHERE id = ?")
-  stmt.execute(id)
+  stmt = DB.prepare("DELETE FROM todos WHERE id = ? AND user_id = ?")
+  stmt.execute(id, user_id)
   redirect "/"
 end
 
 
 patch "/tasks/:id" do 
   id = params[:id].to_i
-  stmt = DB.prepare("SELECT is_completed FROM todos WHERE id = ?")
-  result = stmt.execute(id).first
+  user_id = session[:user_id]
+  stmt = DB.prepare("SELECT is_completed FROM todos WHERE id = ? AND user_id = ?")
+  result = stmt.execute(id, user_id).first
   is_completed = result[:is_completed].to_i
   if is_completed == 0 then
     is_completed = 1
   else
     is_completed = 0
   end
-  stmt = DB.prepare("UPDATE todos SET is_completed = ? WHERE id = ?").execute(is_completed,id)
+  stmt = DB.prepare("UPDATE todos SET is_completed = ? WHERE id = ? AND user_id = ?").execute(is_completed,id, user_id)
   redirect "/"
 end
