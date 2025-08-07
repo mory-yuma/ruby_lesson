@@ -131,6 +131,6 @@ patch "/tasks/:id" do
   else
     is_completed = 0
   end
-  stmt = DB.prepare("UPDATE todos SET is_completed = ? WHERE id = ? AND user_id = ?").execute(is_completed,id, user_id)
+  DB.prepare("UPDATE todos SET is_completed = ? WHERE id = ? AND user_id = ?").execute(is_completed,id, user_id)
   redirect "/"
 end
