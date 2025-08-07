@@ -1,3 +1,11 @@
+<% if @current_user %>
+  <p>ようこそ、<%= @current_user[:name] %>さん</p>
+  <form action="/logout" method="post">
+    <button type="submit">ログアウト</button>
+  </form>
+<% else %>
+  <p><a href="/login">ログイン</a> または <a href="/signup">ユーザー登録</a></p>
+<% end %>
 <form action="/tasks" method="post">
   <input name="task" type="text">
   <select name="category_id">
