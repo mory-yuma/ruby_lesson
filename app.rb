@@ -5,6 +5,7 @@ require "bcrypt"
 # -理解していない部分-
 require "securerandom"
 require "dotenv/load"
+require "sinatra/activerecord"
 
 secret_key = ENV["SECRET_KEY"]
 
@@ -13,13 +14,25 @@ use Rack::Session::Cookie, key: 'rack.session',
                            secret: secret_key
 # ---
 
-DB = Mysql2::Client.new(
-  host: "localhost",
-  username: "root",
-  password: "",
-  database: "todo_app", 
-  symbolize_keys: true      # 結果のキーを文字列でなくシンボルで返す（:name など）
-)
+set :database, {
+  adapter: "mysql2",
+  host:    "localhost",
+  username:"root",
+  password:"",
+  database:"todo_app",
+  encoding:"utf8mb4"
+}
+
+class Todo < ActiveRecord::Base
+  belongs_to :category
+  belongs_to :user
+end
+class Category < ActiveRecord::Base
+  has_many :todos
+end
+class User < ActiveRecord::Base
+  has_many :todos
+end
 
 # signup
 get "/signup" do
@@ -31,8 +44,7 @@ post "/signup" do
   name = params[:name]
   email = params[:email]
   password = params[:password]
-  stmt = DB.prepare("SELECT * FROM users WHERE email = ?")
-  existing_user = stmt.execute(email).first
+  existing_user = User.find_by(email: email)
   errors = []
   errors << "メールアドレスは必須です。" if email.nil? || email.strip.empty?
   errors << "メールアドレスの形式が正しくありません。" if email && !(email =~ EMAIL_REGEX)
@@ -44,8 +56,7 @@ post "/signup" do
     erb :signup
   else 
     password_digest = BCrypt::Password.create(password)
-    stmt = DB.prepare("INSERT INTO users (name,email,password_digest) VALUES (?,?,?)")
-    stmt.execute(name,email,password_digest)
+    User.create(name: name, email: email, password_digest: password_digest)
     redirect "/login"
   end
 end
@@ -58,10 +69,9 @@ end
 post "/login" do
   email = params[:email]
   password = params[:password]
-  stmt = DB.prepare("SELECT * FROM users WHERE email = ?")
-  result = stmt.execute(email).first
-  if result && BCrypt::Password.new(result[:password_digest]) == password
-    session[:user_id] = result[:id]
+  user = User.find_by(email: email)
+  if user && BCrypt::Password.new(user[:password_digest]) == password
+    session[:user_id] = user[:id]
     redirect "/"
   else
     "メールアドレスまたはパスワードが間違っています"
@@ -74,29 +84,19 @@ post "/logout" do
   redirect "/"
 end
 
-# getリクエスト = ブラウザ(ChromeやSafari)がサーバーに「このページの内容をください」とお願いするリクエスト
-# "/"に対してgetリクエストを送ってきたらブロックの処理をしますよ
-# aタグはgetリクエストを送る
 get "/" do
   @current_user = nil
   if session[:user_id]
-    stmt = DB.prepare("SELECT * FROM users WHERE id = ?")
-    @current_user = stmt.execute(session[:user_id]).first
+    @current_user = User.find_by(id: session[:user_id])
   end
-  @categories = DB.query("SELECT id, name FROM categories")
-  stmt = DB.prepare("
-      SELECT todos.*, categories.name AS category_name
-      FROM todos
-      INNER JOIN categories ON todos.category_id = categories.id
-      WHERE todos.user_id = ?
-    ")
-    @todos = stmt.execute(session[:user_id]).map do |t| {
-      id: t[:id],
-      task_name: t[:name],
-      category_name: t[:category_name],
-      checked: t[:is_completed].to_i == 1 ? "checked" : "",
-      is_completed_class: t[:is_completed].to_i == 1 ? "completed" : ""
-    }
+  @categories = Category.select(:id, :name)
+  @todos = Todo.joins(:category).where(user_id: session[:user_id]).map do |t| {
+    id: t.id,
+    task_name: t.name,
+    category_name: t.category.name,
+    checked: t.is_completed ? "checked" : "",
+    is_completed_class: t.is_completed ? "completed" : ""
+  }
   end
   erb :index
 end
@@ -105,17 +105,15 @@ post "/tasks" do
   task = params[:task]
   category_id = params[:category_id].to_i
   user_id = session[:user_id]
-  stmt = DB.prepare("INSERT INTO todos (name, category_id, user_id) VALUES (?,?,?)")
-  stmt.execute(task, category_id, user_id)
+  Todo.create(name: task, category_id: category_id, user_id: user_id)
   redirect "/"
 end
 
-# .escapeは文字列をエスケープするメソッド to_sは文字列化するメソッド
 delete "/tasks/:id" do
   id = params[:id].to_i
   user_id = session[:user_id]
-  stmt = DB.prepare("DELETE FROM todos WHERE id = ? AND user_id = ?")
-  stmt.execute(id, user_id)
+  todo = Todo.find_by(id: id, user_id: user_id)
+  todo.destroy if todo
   redirect "/"
 end
 
@@ -123,14 +121,9 @@ end
 patch "/tasks/:id" do 
   id = params[:id].to_i
   user_id = session[:user_id]
-  stmt = DB.prepare("SELECT is_completed FROM todos WHERE id = ? AND user_id = ?")
-  result = stmt.execute(id, user_id).first
-  is_completed = result[:is_completed].to_i
-  if is_completed == 0 then
-    is_completed = 1
-  else
-    is_completed = 0
+  todo = Todo.find_by(id: id, user_id: user_id)
+  if todo
+    todo.update(is_completed: !todo.is_completed)
   end
-  DB.prepare("UPDATE todos SET is_completed = ? WHERE id = ? AND user_id = ?").execute(is_completed,id, user_id)
   redirect "/"
 end
